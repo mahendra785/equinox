@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 :root {
   --bg0: #050810;
@@ -358,3 +359,145 @@ body::after {
 
 .pulse { animation: pulse-glow 2s infinite; }
 .pulse-fast { animation: pulse-glow 1.2s infinite; }
+
+.heatmap-dashboard-card {
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.08);
+  overflow: hidden;
+  background: linear-gradient(180deg, #12131a 0%, #0c1220 100%);
+  box-shadow: 0 28px 90px rgba(0,0,0,0.35);
+}
+
+.heatmap-dashboard-header {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 24px;
+  align-items: center;
+  padding: 22px 26px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(180deg, rgba(10,11,15,0.96), rgba(19,20,29,0.94));
+}
+
+.heatmap-brand {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.03em;
+  padding-right: 24px;
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+
+.heatmap-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.04em;
+  margin-bottom: 4px;
+}
+
+.heatmap-subtitle {
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
+.heatmap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.95);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #f8fafc;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.heatmap-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 12px rgba(239,68,68,0.8);
+}
+
+.heatmap-shell {
+  position: relative;
+  min-height: 760px;
+  background: #0d1117;
+}
+
+.heatmap-canvas {
+  height: 760px;
+  width: 100%;
+  background: #0d1117;
+}
+
+.heatmap-legend {
+  position: absolute;
+  left: 22px;
+  bottom: 26px;
+  z-index: 600;
+  width: 176px;
+  padding: 18px 18px 16px;
+  border-radius: 16px;
+  background: rgba(14,15,23,0.96);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 20px 48px rgba(0,0,0,0.35);
+}
+
+.heatmap-legend-title {
+  font-size: 12px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 12px;
+  font-family: var(--font-mono);
+}
+
+.heatmap-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #f8fafc;
+  font-size: 13px;
+  padding: 7px 0;
+}
+
+.heatmap-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.heatmap-dot-safe {
+  background: radial-gradient(circle at 35% 35%, #8df0a3, #57c86d 62%, #2d6c39 100%);
+}
+
+.heatmap-dot-moderate {
+  background: radial-gradient(circle at 35% 35%, #ffd56d, #f4b740 62%, #b97313 100%);
+}
+
+.heatmap-dot-danger {
+  background: radial-gradient(circle at 35% 35%, #ff8a7f, #ef4444 62%, #8f1d1d 100%);
+}
+
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: #0d1117;
+}
+
+.leaflet-control-attribution {
+  background: rgba(15,23,42,0.82) !important;
+  color: #94a3b8 !important;
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: rgba(15,23,42,0.96) !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(255,255,255,0.08);
+}

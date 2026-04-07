@@ -1,14 +1,30 @@
 "use client";
 
+import { useMemo } from "react";
+import dynamic from "next/dynamic";
 import Sidebar from "../components/Sidebar";
 import AnalyticsPanel from "./components/AnalyticsPanel";
 import DebugLog from "./components/DebugLog";
 import LiveVideoPane from "./components/LiveVideoPane";
 import UploadPanel from "./components/UploadPanel";
 import { useLiveVideoProcessing } from "./hooks/useLiveVideoProcessing";
+import { normalizeHeatmapCells } from "../heatmap/normalizeCells";
+
+const HeatmapMap = dynamic(() => import("../heatmap/HeatmapMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="card" style={{ padding: 24, minHeight: 420 }}>
+      Loading heat overlay...
+    </div>
+  ),
+});
 
 export default function DashboardPage() {
   const live = useLiveVideoProcessing();
+  const heatmapCells = useMemo(
+    () => normalizeHeatmapCells(live.heatmap?.raw),
+    [live.heatmap],
+  );
 
   return (
     <div className="app-shell">
@@ -112,6 +128,7 @@ export default function DashboardPage() {
             droppedFrames={live.droppedFrames}
             effectiveFps={live.effectiveFps}
             errorText={live.errorText}
+            geoTrack={live.geoTrack}
             health={live.health}
             heatmap={live.heatmap}
             onBroadcast={live.submitBroadcast}
@@ -121,6 +138,42 @@ export default function DashboardPage() {
             streamUrl={live.streamUrl}
             transportMode={live.transportMode}
           />
+
+          <section className="card" style={{ padding: 18 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 10,
+                    color: "var(--text-muted)",
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    marginBottom: 6,
+                  }}
+                >
+                  Live Heat Overlay
+                </div>
+                <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>
+                  Backend `cells` rendered as a smoothed heat layer using `danger_index`.
+                </div>
+              </div>
+              <span className="badge badge-warn">
+                <span className="badge-dot" />
+                {heatmapCells.length} cells
+              </span>
+            </div>
+            <HeatmapMap cells={heatmapCells} />
+          </section>
 
           <DebugLog logs={live.logs} />
         </div>

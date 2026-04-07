@@ -1,159 +1,154 @@
 "use client";
-import { useState } from "react";
+
+import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import Sidebar from "../components/Sidebar";
+import { fetchHeatmapSnapshot } from "../dashboard/services/fognet-api";
+import { normalizeHeatmapCells, type HeatmapCell } from "./normalizeCells";
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div
-      onClick={() => onChange(!value)}
-      style={{
-        width: 44, height: 24, borderRadius: 12, cursor: "pointer",
-        background: value ? "var(--amber)" : "var(--border)",
-        position: "relative", transition: "background 0.25s", flexShrink: 0,
-      }}
-    >
-      <div style={{
-        position: "absolute", top: 3, left: value ? 23 : 3, width: 18, height: 18,
-        borderRadius: "50%", background: value ? "#0a0d11" : "var(--text-muted)",
-        transition: "left 0.25s",
-      }} />
+const HeatmapMap = dynamic(() => import("./HeatmapMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="card" style={{ padding: 24, minHeight: 520 }}>
+      Loading OpenStreetMap tiles...
     </div>
-  );
-}
+  ),
+});
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="card" style={{ padding: 24, marginBottom: 16 }}>
-      <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--amber)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid var(--border)" }}>{title}</div>
-      {children}
-    </div>
-  );
-}
+export default function HeatmapPage() {
+  const [cells, setCells] = useState<HeatmapCell[]>([]);
+  const [status, setStatus] = useState("Waiting for backend heatmap data...");
+  const [lastRefresh, setLastRefresh] = useState<string | null>(null);
 
-function Row({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
-      <div>
-        <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 2 }}>{label}</div>
-        {sub && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{sub}</div>}
-      </div>
-      {children}
-    </div>
-  );
-}
+  useEffect(() => {
+    let active = true;
 
-export default function SettingsPage() {
-  const [settings, setSettings] = useState({
-    autoCycle: true,
-    alertSound: true,
-    meshBroadcast: true,
-    heatmapUpdate: true,
-    skipFrames: 3,
-    resolution: "320x240",
-    model: "MobileNetV3-Large",
-    alertThreshold: 0.35,
-    broadcastRadius: 2.0,
-    fps: 15,
-  });
+    async function loadHeatmap() {
+      try {
+        const snapshot = await fetchHeatmapSnapshot();
+        if (!active) {
+          return;
+        }
 
-  const set = (key: string, val: unknown) => setSettings(prev => ({ ...prev, [key]: val }));
+        const nextCells = normalizeHeatmapCells(snapshot.raw);
+        setCells(nextCells);
+        setLastRefresh(new Date().toLocaleTimeString());
+        setStatus(
+          nextCells.length
+            ? `Loaded ${nextCells.length} heatmap cells from the backend.`
+            : "Backend is reachable, but no heatmap cells are available yet.",
+        );
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        setStatus(
+          error instanceof Error
+            ? error.message
+            : "Heatmap request failed unexpectedly.",
+        );
+      }
+    }
+
+    void loadHeatmap();
+    const intervalId = window.setInterval(() => {
+      void loadHeatmap();
+    }, 10000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const stats = useMemo(() => {
+    const totalEvents = cells.reduce((sum, cell) => sum + cell.event_count, 0);
+    const maxDanger = cells.reduce(
+      (maxValue, cell) => Math.max(maxValue, cell.max_danger_score, cell.danger_index),
+      0,
+    );
+    const highestRisk =
+      cells.find((cell) => cell.risk_level === "HIGH")?.risk_level ??
+      cells.find((cell) => cell.risk_level === "MEDIUM")?.risk_level ??
+      cells.find((cell) => cell.risk_level === "LOW")?.risk_level ??
+      "UNKNOWN";
+
+    return { totalEvents, maxDanger, highestRisk };
+  }, [cells]);
 
   return (
     <div className="app-shell">
       <Sidebar />
-      <main className="main" style={{ padding: 24, maxWidth: 800 }}>
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, letterSpacing: "0.04em", marginBottom: 4 }}>Settings</h1>
-          <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Pipeline configuration · alert thresholds · system preferences</p>
+      <main className="main" style={{ padding: 24 }}>
+        <div className="heatmap-dashboard-card">
+          <div className="heatmap-dashboard-header">
+            <div className="heatmap-brand">FogNet</div>
+            <div>
+              <h1 className="heatmap-title">Road Danger Heatmap Dashboard</h1>
+              <p className="heatmap-subtitle">
+                View live heatmaps for road safety using free OpenStreetMap-based tiles.
+              </p>
+            </div>
+            <div className="heatmap-badge">
+              <span className="heatmap-badge-dot" />
+              {stats.highestRisk}
+            </div>
+          </div>
+
+          <HeatmapMap cells={cells} />
         </div>
 
-        <Section title="Camera Pipeline">
-          <Row label="Resolution" sub="Input frame dimensions for segmentation model">
-            <select
-              value={settings.resolution}
-              onChange={e => set("resolution", e.target.value)}
-              style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: 11, padding: "6px 10px", outline: "none" }}
-            >
-              {["320x240", "640x480", "1280x720"].map(r => <option key={r}>{r}</option>)}
-            </select>
-          </Row>
-          <Row label="Frame Skip" sub="Process every Nth frame to reduce CPU load">
-            <input
-              type="number" min={1} max={10} value={settings.skipFrames}
-              onChange={e => set("skipFrames", +e.target.value)}
-              className="input-field" style={{ width: 80, textAlign: "center", fontFamily: "var(--font-mono)" }}
-            />
-          </Row>
-          <Row label="Target FPS" sub="Maximum frames per second for processing pipeline">
-            <input
-              type="number" min={1} max={30} value={settings.fps}
-              onChange={e => set("fps", +e.target.value)}
-              className="input-field" style={{ width: 80, textAlign: "center", fontFamily: "var(--font-mono)" }}
-            />
-          </Row>
-          <Row label="Segmentation Model" sub="Neural network backbone for scene parsing">
-            <select
-              value={settings.model}
-              onChange={e => set("model", e.target.value)}
-              style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: 11, padding: "6px 10px", outline: "none" }}
-            >
-              {["MobileNetV3-Large", "MobileNetV3-Small", "ResNet-50", "ResNet-101"].map(m => <option key={m}>{m}</option>)}
-            </select>
-          </Row>
-          <Row label="Auto Cycle Demo" sub="Automatically vary fog intensity in simulation mode">
-            <Toggle value={settings.autoCycle} onChange={v => set("autoCycle", v)} />
-          </Row>
-        </Section>
-
-        <Section title="Alert Configuration">
-          <Row label="Dense Fog Threshold" sub={`Alert triggers when visibility score drops below ${settings.alertThreshold}`}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--amber)", width: 40, textAlign: "right" }}>{settings.alertThreshold.toFixed(2)}</span>
-              <input
-                type="range" min="0.1" max="0.6" step="0.01"
-                value={settings.alertThreshold}
-                onChange={e => set("alertThreshold", +e.target.value)}
-                style={{ width: 120, accentColor: "var(--amber)" }}
-              />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 16,
+            marginTop: 18,
+          }}
+        >
+          <div className="card" style={{ padding: 18 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+              Heatmap Cells
             </div>
-          </Row>
-          <Row label="Broadcast Radius" sub="Mesh alert radius in kilometers">
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--cyan)", width: 40, textAlign: "right" }}>{settings.broadcastRadius.toFixed(1)}km</span>
-              <input
-                type="range" min="0.5" max="5" step="0.5"
-                value={settings.broadcastRadius}
-                onChange={e => set("broadcastRadius", +e.target.value)}
-                style={{ width: 120, accentColor: "var(--cyan)" }}
-              />
+            <div style={{ fontSize: 28, fontWeight: 700 }}>{cells.length}</div>
+          </div>
+          <div className="card" style={{ padding: 18 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+              Aggregated Events
             </div>
-          </Row>
-          <Row label="Alert Sound" sub="Play audio notification on critical events">
-            <Toggle value={settings.alertSound} onChange={v => set("alertSound", v)} />
-          </Row>
-          <Row label="Mesh Broadcast" sub="Auto-broadcast alerts to nearby vehicles via P2P mesh">
-            <Toggle value={settings.meshBroadcast} onChange={v => set("meshBroadcast", v)} />
-          </Row>
-          <Row label="Live Heatmap Updates" sub="Push visibility data to authority dashboard API">
-            <Toggle value={settings.heatmapUpdate} onChange={v => set("heatmapUpdate", v)} />
-          </Row>
-        </Section>
-
-        <Section title="Account">
-          <Row label="Operator Email" sub="Currently signed in account">
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>demo@fognet.io</span>
-          </Row>
-          <Row label="API Key" sub="For heatmap dashboard integration">
-            <div style={{ display: "flex", gap: 8 }}>
-              <code style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-muted)", background: "var(--bg-surface)", padding: "4px 10px", borderRadius: 6 }}>fn_••••••••••••••••</code>
-              <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px" }}>REVEAL</button>
+            <div style={{ fontSize: 28, fontWeight: 700 }}>{stats.totalEvents}</div>
+          </div>
+          <div className="card" style={{ padding: 18 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+              Peak Danger
             </div>
-          </Row>
-        </Section>
+            <div style={{ fontSize: 28, fontWeight: 700 }}>{stats.maxDanger.toFixed(2)}</div>
+          </div>
+          <div className="card" style={{ padding: 18 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+              Last Refresh
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{lastRefresh ?? "never"}</div>
+          </div>
+        </div>
 
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button className="btn-ghost">Reset Defaults</button>
-          <button className="btn-primary">Save Settings →</button>
+        <div className="card" style={{ padding: 18, marginTop: 16 }}>
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 10,
+              color: "var(--text-muted)",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              marginBottom: 12,
+            }}
+          >
+            Backend Feed
+          </div>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+            {status} The backend should return dense `cells` across the route corridor to
+            produce a natural heat surface instead of isolated blobs.
+          </div>
         </div>
       </main>
     </div>

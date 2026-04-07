@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   buildProcessedImageUrl,
+  buildSyntheticGeoTrack,
   fetchHealthSnapshot,
   fetchHeatmapSnapshot,
   fognetEndpoints,
@@ -22,6 +23,7 @@ import type {
   ConnectionState,
   DashboardMedia,
   DebugEntry,
+  GeoTrack,
   HealthSnapshot,
   HeatmapSnapshot,
   ProcessingFrame,
@@ -69,6 +71,7 @@ export function useLiveVideoProcessing() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [health, setHealth] = useState<HealthSnapshot | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapSnapshot | null>(null);
+  const [geoTrack, setGeoTrack] = useState<GeoTrack | null>(null);
   const [logs, setLogs] = useState<DebugEntry[]>([]);
   const [batchOutputPath, setBatchOutputPath] = useState<string | null>(null);
   const [broadcastState, setBroadcastState] = useState<BroadcastState>({
@@ -89,6 +92,7 @@ export function useLiveVideoProcessing() {
   const processedMediaUrlRef = useRef<string | null>(null);
   const originalPreviewUrlRef = useRef<string | null>(null);
   const transportModeRef = useRef<TransportMode>("websocket");
+  const lastBroadcastFrameRef = useRef<number>(-1);
 
   function appendLog(level: DebugEntry["level"], message: string) {
     setLogs((current) => [makeLog(level, message), ...current].slice(0, 80));
@@ -117,6 +121,7 @@ export function useLiveVideoProcessing() {
     setPendingFrames(0);
     setEffectiveFps(0);
     setBatchOutputPath(null);
+    setGeoTrack(null);
     setErrorText(null);
     setBroadcastState({ pending: false, message: null, alerts: null });
     extractorCompleteRef.current = false;
@@ -212,6 +217,66 @@ export function useLiveVideoProcessing() {
     );
   }
 
+  function findGeoSample(frameIndex: number) {
+    return geoTrack?.samples.find((sample) => sample.frameIndex === frameIndex) ?? null;
+  }
+
+  async function maybeBroadcastFrame(result: AnalyticsResult) {
+    const geoSample = findGeoSample(result.frameIndex);
+
+    if (!geoSample) {
+      return;
+    }
+
+    if (lastBroadcastFrameRef.current === result.frameIndex) {
+      return;
+    }
+
+    lastBroadcastFrameRef.current = result.frameIndex;
+
+    try {
+      console.log("[fognet] broadcasting frame coordinates", {
+        frameIndex: result.frameIndex,
+        timestamp: result.timestamp,
+        latitude: geoSample.latitude,
+        longitude: geoSample.longitude,
+        source: geoSample.source,
+      });
+
+      const response = (await postBroadcastAlert({
+        danger_score: result.dangerScore,
+        risk: result.risk,
+        latitude: geoSample.latitude,
+        longitude: geoSample.longitude,
+        timestamp: result.timestamp,
+        source: currentFileRef.current?.name || "dashboard-live",
+      })) as Record<string, unknown>;
+
+      const alerts =
+        Number(response.alerts) ||
+        Number(response.nearby_alerts) ||
+        (Array.isArray(response.results) ? response.results.length : 0) ||
+        0;
+
+      setBroadcastState({
+        pending: false,
+        alerts,
+        message: `Auto-broadcasted frame ${result.frameIndex} using synthetic coordinates.`,
+      });
+      appendLog(
+        "info",
+        `Broadcast frame ${result.frameIndex} at ${geoSample.latitude.toFixed(5)}, ${geoSample.longitude.toFixed(5)}.`,
+      );
+    } catch (error) {
+      appendLog(
+        "warn",
+        error instanceof Error
+          ? error.message
+          : "Automatic frame broadcast failed.",
+      );
+    }
+  }
+
   async function switchToHttpFallback(reason: string) {
     appendLog("warn", reason);
     transportRef.current?.dispose();
@@ -304,6 +369,7 @@ export function useLiveVideoProcessing() {
         return;
       }
       applyResult(result);
+      void maybeBroadcastFrame(result);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Frame processing failed.";
@@ -364,11 +430,20 @@ export function useLiveVideoProcessing() {
           }
           setVideoInfo(info);
           updateOriginalPreview(previewUrl);
+          const syntheticTrack = buildSyntheticGeoTrack(
+            Math.max(1, Math.floor((info.duration || 0) * TARGET_FPS)),
+            TARGET_FPS,
+            file.name,
+          );
+          console.log("[fognet] synthetic geo track", syntheticTrack);
+          console.log("[fognet] synthetic geo samples", syntheticTrack.samples);
+          setGeoTrack(syntheticTrack);
           setStatusText("Decoding frames in browser and sending them live.");
           appendLog(
             "info",
             `Frame extraction started at ${TARGET_FPS} FPS (${info.width}x${info.height}).`,
           );
+          appendLog("info", syntheticTrack.note);
         },
         onFrame: async (frame) => {
           await enqueueFrame(frame, nextSessionId);
@@ -405,7 +480,7 @@ export function useLiveVideoProcessing() {
     }
   }
 
-  async function submitBroadcast(latitude: number, longitude: number) {
+  async function submitBroadcast() {
     if (!analytics) {
       setBroadcastState({
         pending: false,
@@ -415,14 +490,34 @@ export function useLiveVideoProcessing() {
       return;
     }
 
+    const geoSample = findGeoSample(analytics.frameIndex);
+
+    if (!geoSample) {
+      setBroadcastState({
+        pending: false,
+        alerts: null,
+        message:
+          "No synthetic coordinates are available for the current frame.",
+      });
+      return;
+    }
+
     setBroadcastState({ pending: true, alerts: null, message: null });
 
     try {
+      console.log("[fognet] manual broadcast using current frame coordinates", {
+        frameIndex: analytics.frameIndex,
+        timestamp: analytics.timestamp,
+        latitude: geoSample.latitude,
+        longitude: geoSample.longitude,
+        source: geoSample.source,
+      });
+
       const response = (await postBroadcastAlert({
         danger_score: analytics.dangerScore,
         risk: analytics.risk,
-        latitude,
-        longitude,
+        latitude: geoSample.latitude,
+        longitude: geoSample.longitude,
         timestamp: analytics.timestamp,
         source: currentFileRef.current?.name || "dashboard",
       })) as Record<string, unknown>;
@@ -436,7 +531,7 @@ export function useLiveVideoProcessing() {
       setBroadcastState({
         pending: false,
         alerts,
-        message: `Broadcast sent. Nearby alerts: ${alerts}.`,
+        message: `Broadcast sent using synthetic coordinates. Nearby alerts: ${alerts}.`,
       });
       appendLog("info", `Broadcast posted with ${alerts} nearby alerts.`);
     } catch (error) {
@@ -518,6 +613,7 @@ export function useLiveVideoProcessing() {
     logs,
     batchOutputPath,
     broadcastState,
+    geoTrack,
     reportUrl: fognetEndpoints.report,
     streamUrl: fognetEndpoints.stream,
     startProcessing,

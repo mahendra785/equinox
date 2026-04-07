@@ -1,10 +1,8 @@
-"use client";
-
-import { useState } from "react";
 import type {
   AnalyticsResult,
   BroadcastState,
   ConnectionState,
+  GeoTrack,
   HealthSnapshot,
   HeatmapSnapshot,
   RiskLevel,
@@ -23,10 +21,11 @@ interface AnalyticsPanelProps {
   pendingFrames: number;
   processedFrames: number;
   droppedFrames: number;
+  geoTrack: GeoTrack | null;
   reportUrl: string;
   streamUrl: string;
   transportMode: TransportMode;
-  onBroadcast: (latitude: number, longitude: number) => void;
+  onBroadcast: () => void;
 }
 
 function riskColor(risk: RiskLevel | undefined) {
@@ -53,15 +52,27 @@ function transportLabel(mode: TransportMode) {
 }
 
 export default function AnalyticsPanel(props: AnalyticsPanelProps) {
-  const [latitude, setLatitude] = useState("12.9716");
-  const [longitude, setLongitude] = useState("77.5946");
   const color = riskColor(props.analytics?.risk);
   const dangerValue = props.analytics?.dangerScore ?? 0;
   const visibility = props.analytics?.visibility ?? 0;
   const objects = props.analytics?.objects ?? {};
+  const currentGeoSample =
+    props.analytics && props.geoTrack
+      ? (props.geoTrack.samples.find(
+          (sample) => sample.frameIndex === props.analytics?.frameIndex,
+        ) ?? null)
+      : null;
+  const thresholdBand =
+    dangerValue < 0.4
+      ? "SAFE"
+      : dangerValue < 0.9
+        ? "MEDIUM"
+        : "HIGH";
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 16 }}>
+    <div
+      style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 16 }}
+    >
       <section className="card card-warn" style={{ padding: 18 }}>
         <div
           style={{
@@ -92,7 +103,13 @@ export default function AnalyticsPanel(props: AnalyticsPanelProps) {
               padding: 14,
             }}
           >
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                marginBottom: 6,
+              }}
+            >
               Risk
             </div>
             <div style={{ fontSize: 24, fontWeight: 700, color }}>
@@ -100,13 +117,36 @@ export default function AnalyticsPanel(props: AnalyticsPanelProps) {
             </div>
           </div>
           <div className="card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                marginBottom: 6,
+              }}
+            >
               Danger Score
             </div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{dangerValue.toFixed(2)}</div>
+            <div style={{ fontSize: 24, fontWeight: 700 }}>
+              {dangerValue.toFixed(2)}
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-secondary)",
+                marginTop: 4,
+              }}
+            >
+              Threshold band: {thresholdBand}
+            </div>
           </div>
           <div className="card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                marginBottom: 6,
+              }}
+            >
               Visibility
             </div>
             <div style={{ fontSize: 24, fontWeight: 700 }}>
@@ -177,7 +217,13 @@ export default function AnalyticsPanel(props: AnalyticsPanelProps) {
               </div>
             ))
           ) : (
-            <div style={{ gridColumn: "1 / -1", color: "var(--text-muted)", fontSize: 13 }}>
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                color: "var(--text-muted)",
+                fontSize: 13,
+              }}
+            >
               Object counts will appear as processed frames return.
             </div>
           )}
@@ -186,29 +232,74 @@ export default function AnalyticsPanel(props: AnalyticsPanelProps) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
             gap: 12,
             marginBottom: 16,
           }}
         >
           <div className="card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                marginBottom: 6,
+              }}
+            >
               Effective FPS
             </div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{props.effectiveFps.toFixed(1)}</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>
+              {props.effectiveFps.toFixed(1)}
+            </div>
           </div>
           <div className="card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                marginBottom: 6,
+              }}
+            >
               Processed Frames
             </div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{props.processedFrames}</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>
+              {props.processedFrames}
+            </div>
           </div>
           <div className="card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                marginBottom: 6,
+              }}
+            >
               Dropped / Pending
             </div>
             <div style={{ fontSize: 20, fontWeight: 700 }}>
               {props.droppedFrames} / {props.pendingFrames}
+            </div>
+          </div>
+          <div className="card" style={{ padding: 14 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                marginBottom: 6,
+              }}
+            >
+              Backend Thresholds
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-secondary)",
+                lineHeight: 1.6,
+              }}
+            >
+              <div>safe: &lt; 0.5</div>
+              <div>low: 0.5 to &lt; 0.9</div>
+              <div>medium: 0.9 to &lt; 1.2</div>
+              <div>high: &ge; 1.2</div>
             </div>
           </div>
         </div>
@@ -239,7 +330,9 @@ export default function AnalyticsPanel(props: AnalyticsPanelProps) {
             </div>
           ) : null}
           {props.errorText ? (
-            <div style={{ fontSize: 12, color: "var(--red)" }}>{props.errorText}</div>
+            <div style={{ fontSize: 12, color: "var(--red)" }}>
+              {props.errorText}
+            </div>
           ) : null}
         </div>
       </section>
@@ -266,13 +359,45 @@ export default function AnalyticsPanel(props: AnalyticsPanelProps) {
               Heatmap points: <strong>{props.heatmap?.points ?? 0}</strong>
             </div>
             <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-              Max heatmap danger: <strong>{(props.heatmap?.maxDanger ?? 0).toFixed(2)}</strong>
+              Max heatmap danger:{" "}
+              <strong>{(props.heatmap?.maxDanger ?? 0).toFixed(2)}</strong>
             </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
-              <a className="btn" href={props.streamUrl} rel="noreferrer" target="_blank">
+            <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+              Geo samples:{" "}
+              <strong>{props.geoTrack?.samples.length ?? 0}</strong>
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--text-secondary)",
+                lineHeight: 1.6,
+              }}
+            >
+              {props.geoTrack?.note ??
+                "Synthetic route generation is waiting for the selected video."}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                marginTop: 4,
+              }}
+            >
+              <a
+                className="btn"
+                href={props.streamUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
                 Open /stream
               </a>
-              <a className="btn" href={props.reportUrl} rel="noreferrer" target="_blank">
+              <a
+                className="btn"
+                href={props.reportUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
                 Download /report
               </a>
             </div>
@@ -293,29 +418,55 @@ export default function AnalyticsPanel(props: AnalyticsPanelProps) {
             Broadcast Alert
           </div>
           <div style={{ display: "grid", gap: 10 }}>
-            <input
-              className="input"
-              onChange={(event) => setLatitude(event.target.value)}
-              placeholder="Latitude"
-              value={latitude}
-            />
-            <input
-              className="input"
-              onChange={(event) => setLongitude(event.target.value)}
-              placeholder="Longitude"
-              value={longitude}
-            />
+            <div className="card" style={{ padding: 12 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-muted)",
+                  marginBottom: 6,
+                }}
+              >
+                Current frame coordinates
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-secondary)",
+                  lineHeight: 1.6,
+                }}
+              >
+                {currentGeoSample ? (
+                  <>
+                    <div>Latitude: {currentGeoSample.latitude.toFixed(6)}</div>
+                    <div>
+                      Longitude: {currentGeoSample.longitude.toFixed(6)}
+                    </div>
+                    <div>Source: {currentGeoSample.source}</div>
+                  </>
+                ) : (
+                  "No synthetic coordinates are available for the current frame."
+                )}
+              </div>
+            </div>
             <button
               className="btn btn-primary"
-              disabled={props.broadcastState.pending}
-              onClick={() => props.onBroadcast(Number(latitude), Number(longitude))}
+              disabled={props.broadcastState.pending || !currentGeoSample}
+              onClick={props.onBroadcast}
               type="button"
             >
-              {props.broadcastState.pending ? "Sending..." : "POST /broadcast"}
+              {props.broadcastState.pending
+                ? "Sending..."
+                : "POST /broadcast with synthetic coordinates"}
             </button>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--text-secondary)",
+                lineHeight: 1.6,
+              }}
+            >
               {props.broadcastState.message ??
-                "Push the current danger score and location to the backend alert pipeline."}
+                "Push the current danger score with the generated route coordinates for heatmap visualization."}
             </div>
           </div>
         </section>

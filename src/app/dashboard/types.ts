@@ -75,3 +75,18 @@ export interface BroadcastPayload {
   timestamp: number;
   source: string;
 }
+
+export interface GeoSample {
+  frameIndex: number;
+  timestamp: number;
+  latitude: number;
+  longitude: number;
+  source: "synthetic-track";
+}
+
+export interface GeoTrack {
+  samples: GeoSample[];
+  hasEmbeddedLocation: boolean;
+  metadata: Record<string, string>;
+  note: string;
+}

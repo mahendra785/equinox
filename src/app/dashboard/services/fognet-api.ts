@@ -1,6 +1,7 @@
 import type {
   AnalyticsResult,
   BroadcastPayload,
+  GeoTrack,
   HealthSnapshot,
   HeatmapSnapshot,
   ProcessingFrame,
@@ -132,6 +133,56 @@ export async function postBroadcastAlert(payload: BroadcastPayload) {
   }
 
   return response.json();
+}
+
+export function buildSyntheticGeoTrack(
+  frameCount: number,
+  targetFps: number,
+  seed: string,
+): GeoTrack {
+  let hash = 2166136261;
+
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  const baseLatitude = 12.9716 + ((hash % 700) - 350) / 10000;
+  const baseLongitude = 77.5946 + (((hash >>> 8) % 700) - 350) / 10000;
+  const stepLatitude = 0.00018 + (((hash >>> 16) % 12) / 100000);
+  const stepLongitude = 0.00012 + (((hash >>> 22) % 12) / 100000);
+  const wobbleLatitude = 0.00008;
+  const wobbleLongitude = 0.0001;
+
+  return {
+    samples: Array.from({ length: Math.max(1, frameCount) }, (_, frameIndex) => ({
+      frameIndex,
+      timestamp: Number((frameIndex / targetFps).toFixed(3)),
+      latitude: Number(
+        (
+          baseLatitude +
+          frameIndex * stepLatitude +
+          Math.sin(frameIndex / 6) * wobbleLatitude
+        ).toFixed(6),
+      ),
+      longitude: Number(
+        (
+          baseLongitude +
+          frameIndex * stepLongitude +
+          Math.cos(frameIndex / 5) * wobbleLongitude
+        ).toFixed(6),
+      ),
+      source: "synthetic-track" as const,
+    })),
+    hasEmbeddedLocation: false,
+    metadata: {
+      generator: "synthetic-track",
+      seed,
+      base_latitude: baseLatitude.toFixed(6),
+      base_longitude: baseLongitude.toFixed(6),
+    },
+    note: "Synthetic route generated locally for demo heatmap visualization.",
+  };
 }
 
 export async function processBatchVideo(file: File) {
