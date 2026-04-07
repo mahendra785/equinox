@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MP4 to 15 FPS Video
+
+This Next.js app accepts an MP4 upload and returns a new MP4 whose video stream is converted to 15 fps. It is useful when you need a lower frame-rate deliverable while keeping the result in a browser-friendly H.264 container.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies and run the development server:
+
+```bash
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000), upload an `mp4` file, and convert it.
+
+## How it Works
+
+- The UI sends the selected MP4 to `POST /api/render`.
+- The server writes the upload to a temporary folder.
+- `ffmpeg-static` provides a local ffmpeg binary.
+- ffmpeg transcodes the video stream to 15 fps and returns an H.264 MP4 to the browser.
+
+## Notes
+
+- Input is limited to MP4 uploads in the current implementation.
+- Output uses `yuv420p` pixel format for broad player compatibility.
+- Audio is encoded to AAC when present in the source.
+- No system ffmpeg install is required because the project bundles one with `ffmpeg-static`.
+
+## Scripts
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run lint
+npm run build
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
