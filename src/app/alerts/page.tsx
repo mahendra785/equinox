@@ -40,6 +40,12 @@ const initialAlerts: Alert[] = Array.from({ length: 8 }, generateAlert).map((a, 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>(initialAlerts);
   const [filter, setFilter] = useState<"all" | "critical" | "warning" | "info">("all");
+  const filterOptions: Array<"all" | "critical" | "warning" | "info"> = [
+    "all",
+    "critical",
+    "warning",
+    "info",
+  ];
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -104,10 +110,10 @@ export default function AlertsPage() {
 
         {/* FILTER */}
         <div style={{ marginBottom: 16 }}>
-          {["all", "critical", "warning", "info"].map(f => (
+          {filterOptions.map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f as any)}
+              onClick={() => setFilter(f)}
               className="btn"
               style={{ marginRight: 8 }}
             >
